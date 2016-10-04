@@ -42,8 +42,6 @@ from nupic.algorithms.anomaly_likelihood	import AnomalyLikelihood
 
 import model_params
 
-WINDOW = 60
-
 class AudioPrediction:
 
 	def __init__(self):
@@ -58,6 +56,7 @@ class AudioPrediction:
 		plt.xlabel('Time')
 		plt.ylabel('Frequency Level [dB]')
 		yLimit = 200
+		xLimit = 60
 		plt.ylim(0, yLimit)
 
 
@@ -71,15 +70,15 @@ class AudioPrediction:
 
 		shifter 	= InferenceShifter()
 
-		actHistory 	= deque([0.0] * WINDOW, maxlen = 60)
-		predHistory	= deque([0.0] * WINDOW, maxlen = 60)
-		anomHistory = deque([0.0] * WINDOW, maxlen = 60)
-		likeHistory	= deque([0.0] * WINDOW, maxlen = 60)
+		actHistory 	= deque([0.0] * xLimit, maxlen = 60)
+		predHistory	= deque([0.0] * xLimit, maxlen = 60)
+		anomHistory = deque([0.0] * xLimit, maxlen = 60)
+		likeHistory	= deque([0.0] * xLimit, maxlen = 60)
 
-		actline, 	= plt.plot(range(WINDOW), actHistory)
-		predline, 	= plt.plot(range(WINDOW), predHistory)
-		anomline,	= plt.plot(range(WINDOW), anomHistory)
-		likeline,	= plt.plot(range(WINDOW), likeHistory)	
+		actline, 	= plt.plot(range(xLimit), actHistory)
+		predline, 	= plt.plot(range(xLimit), predHistory)
+		anomline,	= plt.plot(range(xLimit), anomHistory)
+		likeline,	= plt.plot(range(xLimit), likeHistory)	
 
 		"""
 		Instance of the class to stream audio
@@ -105,12 +104,11 @@ class AudioPrediction:
 			anomaly 	= result.inferences['anomalyScore']
 			likelihood 	= likelihoods.anomalyProbability(inputLevel, anomaly)
 
-			if anomaly is not None:
-				actHistory .append(result.rawInput['binAmplitude'])
-				predHistory.append(inference)
-				anomHistory.append(anomaly * yLimit/2)
-				likeHistory.append(likelihood * yLimit/2)
-
+			#if anomaly is not None:
+			actHistory .append(result.rawInput['binAmplitude'])
+			predHistory.append(inference)
+			anomHistory.append(anomaly * yLimit/2)
+			likeHistory.append(likelihood * yLimit/2)
 
 			actline	.set_ydata(actHistory)
 			predline.set_ydata(predHistory)
@@ -129,13 +127,11 @@ class AudioStream:
 		Sampling details
 		 rate: The sampling rate in Hz of my soundcard
 		 buffersize: The size of the array to which we will save audio segments (2^12 = 4096 is very good)
-		 secToRecord: The length of each sampling
-		 buffersToRecord: how many multiples of buffers are we recording?
+		 bitResolution: Bit depth of every sample
 		"""
 		rate			=44100
 		self.bufferSize =2**12
 		bitResolution	= 16
-		binSize			= int(rate/self.bufferSize)
 		self.start		= False
 
 
@@ -165,15 +161,14 @@ class AudioStream:
 		p = pyaudio.PyAudio()
 
 		def callback(in_data, frame_count, time_info, status):
-			"""
-			Replaces processAudio()
-			"""
+
 			self.audioIn 	= numpy.fromstring(in_data, dtype = numpy.int16)
 			self.audioFFT	= self.fft(self.audioIn)
 			# Get the frequency levels in dBs 
 			self.audioFFT 	= 20*numpy.log10(self.audioFFT)
 			self.start		= True
 			return (self.audioFFT, pyaudio.paContinue)
+
 
 		self.inStream = p.open(format 	=p.get_format_from_width(width, unsigned = False),
 							channels	=1,
@@ -191,28 +186,20 @@ class AudioStream:
 		print "Buffersize:\t\t" + str(self.bufferSize)
 
 
-		
-
-
 	def fft(self, audio):
-
 		"""
 		Fast Fourier Transform - 
-
-		Output:
-		'output' - the transform of the audio input into frequency domain. 
-		Contains the strength of each frequency in the audio signal
+		Output: the transform of the audio input to frequency domain. 
+		Contains the amplitude of each frequency in the audio signal
 		frequencies are marked by its position in 'output':
 		frequency = index * rate / buffesize
-		output.size = buffersize/2 
+		output.size = bufferSize/2 
 		Use only first half of vector since the second is repeated due to 
 		symmetry.
-
 		Great info here: http://stackoverflow.com/questions/4364823/how-to-get-frequency-from-fft-result
 		"""
 		output = numpy.abs(numpy.fft.fft(audio))
 		return output [0:int(self.bufferSize/2)]
-
 
 
 audiostream = AudioPrediction()
