@@ -1,9 +1,15 @@
 # Audio Stream Example
 
-A simple example that streams your mic input into the temporal pooler (TP), 
-and outputs an anomaly score, based on how familiar the TP has become to that
-particular mic input sequence. Think of it as being able to recognize a song,
-or become more familiar with your speech pattern.
+A simple example that streams your mic input into the Online Prediction Framework (OPF), 
+and outputs a prediction, an anomaly score and a likelihood score, based on how familiar t
+he model has become to that particular mic input sequence. Think of it as being able to 
+recognize a sound, or become more familiar with your speech pattern, and its ability to 
+predict what level is next.
+
+The audio is transformed into the frequency domain using a Fast Fourier Transform (FFT), 
+and only one frequency bin is taken as input to the model. Meaning that the amplitud of the 
+selected bin (frequency) is streamed into the model and then it starts analyzing that
+particular frequency for anomalies and predictions. 
 
 ## Requirements
 
@@ -13,36 +19,31 @@ or become more familiar with your speech pattern.
 
 ## Usage
 
-    python audiostream_tp.py
+    python audiostream.py
 
 This script will run automatically & forever.
 To stop it, use KeyboardInterrupt (CRTL+C).
 
+The model also uses a model_params.py file that includes the
+parameters to use in the analysis.  
+
 ## General algorithm:
 
 1. Mic input is received (voltages in the time domain)
-2. Mic input is transformed into the frequency domain, using fast fourier transform
-3. The few strongest frequencies (in Hz) are identified
-4. Those frequencies are encoded into an SDR
-5. That SDR is passed to the temporal pooler
-6. The temporal pooler provides a prediction
-7. An anomaly score is calculated off that prediction against the next input
-    A low anomaly score means that the temporal pooler is properly predicting 
-    the next frequency pattern.
+2. Mic input is transformed into the frequency domain, using fast fourier transform (FFT)
+3. A frequency range (bin) is selected
+4. That changing bin value is fed into the opf model in every iteration of the script
+5. The model computes prediction, anomaly and likelihood values.
+6. All 4 values (input, prediction, anomaly and likelihood) are plotted.
 
-## Print outs include:
+## Plot includes:
+4 time changing lines corresponding to:
 
-1. An array comparing the actual and predicted TP inputs
-	A - actual
-	P - predicted
-	E - expected (both A & P)
-2. A hashbar representing the anomaly score
-3. Plot of the frequency domain in real-time   
+1.  Raw input
+2.  Predicted value
+3.  Anomaly score
+4.  Likelihood
 
 ## Next steps:
 
-1. Benchmark different parameters (especially TP parameters)
-	Use annoying_test and Online Tone Generator http://onlinetonegenerator.com/
-2. Implement anomaly smoothing
-3. Implement spatial pooler
-4. Look into better algorithms to pick out the frequency peaks (sound fingerprinting)
+1. Look into better algorithms to pick out the frequency peaks (sound fingerprinting). This could be application specific, and user can determine how to select frequency bins.
