@@ -24,11 +24,7 @@ See README.md for details.
 """
 
 """
-numpy - the language of pyaudio (& everything else)
-pyaudio - access to the mic via the soundcard
-pyplot - to plot the sound frequencies
-bitmaparray - encodes an array of indices into an SDR
-TP10X2 - the C++ optimized temporal pooler (TP)
+Example of audio stream to compute predictions, anomaly and likelihood 
 """
 import numpy
 import pyaudio
@@ -36,6 +32,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot 					as plt
 from collections							import deque
+
 from nupic.data.inference_shifter 			import InferenceShifter 
 from nupic.frameworks.opf.modelfactory		import ModelFactory 
 from nupic.algorithms.anomaly_likelihood	import AnomalyLikelihood
@@ -47,8 +44,7 @@ class AudioPrediction:
 	def __init__(self):
 
 		"""
-		Setup the plot, interactive mode on, title, etc.
-		Rescale the y-axis
+		Setup the plot, interactive mode on, title, and ylimits
 		"""
 		plt.ion()
 		fig = plt.figure()
@@ -61,35 +57,42 @@ class AudioPrediction:
 
 
 		"""
-		Create model, set predicted field, and likelihood
+		Create model, set predicted field, likelihoods and shifter
 		"""
 		model 		= ModelFactory.create(model_params.MODEL_PARAMS)
 		model.enableInference({'predictedField' : 'binAmplitude'})
-		
 		likelihoods = AnomalyLikelihood()
-
 		shifter 	= InferenceShifter()
 
+		"""
+		Create vectors to hold data
+		"""
 		actHistory 	= deque([0.0] * xLimit, maxlen = 60)
 		predHistory	= deque([0.0] * xLimit, maxlen = 60)
 		anomHistory = deque([0.0] * xLimit, maxlen = 60)
 		likeHistory	= deque([0.0] * xLimit, maxlen = 60)
 
+		"""
+		4 Lines to plot the Actual input, Predicted input, Anomaly and Likelihood
+		"""
 		actline, 	= plt.plot(range(xLimit), actHistory)
 		predline, 	= plt.plot(range(xLimit), predHistory)
 		anomline,	= plt.plot(range(xLimit), anomHistory)
 		likeline,	= plt.plot(range(xLimit), likeHistory)	
 
 		"""
-		Instance of the class to stream audio
+		Start the execution of audio stream
 		"""
 		audio = AudioStream()
-		while audio.start==False:1
-
 
 		while True:
 
-
+			"""
+			The input is the second bin ([1]), which represents the amplitude of 
+			frequencies ranging from (n*sr / bufferSize) to ((n+1)*sr / bufferSize) 
+			where n is the bin number selected as input. 
+			In this case n = 1 and the range is from 10.67Hz to 21.53Hz
+			"""
 			inputLevel	= audio.audioFFT[1]
 
 			# Clip input
@@ -97,19 +100,23 @@ class AudioPrediction:
 			if inputLevel >  maxLevel:
 				inputLevel = maxLevel
 
+			# Run the input through the model and shift the resulting prediction.
 			modelInput 	= {'binAmplitude' : inputLevel}
 			result 		= shifter.shift(model.run(modelInput))
 
+			# Get inference, anomaly and likelihood from the model
 			inference 	= result.inferences['multiStepBestPredictions'][5]
 			anomaly 	= result.inferences['anomalyScore']
 			likelihood 	= likelihoods.anomalyProbability(inputLevel, anomaly)
 
-			#if anomaly is not None:
+			# Add values to the end of corresponding vector to plot them
+			# Scale anomaly and likelihood to be visible in the plot
 			actHistory .append(result.rawInput['binAmplitude'])
 			predHistory.append(inference)
 			anomHistory.append(anomaly * yLimit/2)
 			likeHistory.append(likelihood * yLimit/2)
 
+			# Update plot and draw
 			actline	.set_ydata(actHistory)
 			predline.set_ydata(predHistory)
 			anomline.set_ydata(anomHistory)
@@ -118,22 +125,19 @@ class AudioPrediction:
 			plt.draw()
 			plt.legend(('actual','predicted', 'anomaly', 'likelihood'))
 
-
 class AudioStream:
 
 	def __init__(self):
 
 		"""
 		Sampling details
-		 rate: The sampling rate in Hz of my soundcard
-		 buffersize: The size of the array to which we will save audio segments (2^12 = 4096 is very good)
+		 rate: The sampling rate in Hz of the audio interface being used.
+		 bufferSize: The size of the array to which we will save audio segments (2^12 = 4096 is very good)
 		 bitResolution: Bit depth of every sample
 		"""
-		rate			=44100
-		self.bufferSize =2**12
+		rate			= 44100
+		self.bufferSize = 2**12
 		bitResolution	= 16
-		self.start		= False
-
 
 		"""
 		Setting up the array that will handle the timeseries of audio data from our input
@@ -154,7 +158,7 @@ class AudioStream:
 
 		"""
 		Creating the audio stream from our mic. This includes callback function for
-		non blocking mode. This means the callback executes everytime whenever it needs 
+		non blocking mode. This means the callback executes whenever it needs 
 		new audio data (to play) and/or when there is new (recorded) audio data available. 
 		Note that PyAudio calls the callback function in a separate thread. 
 		"""
@@ -177,9 +181,18 @@ class AudioStream:
 							frames_per_buffer= self.bufferSize,
 							stream_callback  = callback)
 
+		# Wait for the FFT vector to be created in the first callback execution
+		while 1:
+			try:				
+				self.audioFFT
+			except AttributeError:
+				pass
+			else:
+				print "Audiostream started"
+				break
 
 		"""
-		Print out the inputs
+		Print out the audio streamd details
 		"""
 		print "Sampling rate (Hz):\t" + str(rate)
 		print "Bit Depth:\t\t"  + str(bitResolution)
